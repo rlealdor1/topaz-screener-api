@@ -565,6 +565,13 @@ def _write_valuation_sheet(ws, stmt: IncomeStatement, dcf: "DCFResult",
     _input(29, "Cash & equivalents",     dcf.cash / 1e6, FMT_NUM)
     _input(30, "Shares outstanding (mm)", dcf.shares_outstanding / 1e6, FMT_SHARES)
     _input(31, "Base-year revenue",      dcf.base_revenue / 1e6, FMT_NUM)
+    # Annual buyback yield — drives per-share accretion over the forecast
+    # horizon. 0 for companies that don't repurchase stock.
+    c = ws.cell(row=32, column=2, value="Buyback yield (annual)")
+    c.font = LABEL_FONT
+    c = ws.cell(row=32, column=3, value=dcf.buyback_yield)
+    c.font = INPUT_FONT; c.fill = inputs_fill
+    c.number_format = FMT_PCT1; c.alignment = RIGHT_ALIGN
 
     # ============================================================
     # Analyst Consensus block (columns E-G, rows 10-18)
@@ -956,7 +963,11 @@ def _write_valuation_sheet(ws, stmt: IncomeStatement, dcf: "DCFResult",
     _calc(88, "Implied Equity Value ($M)",   "=C85+C86+C87", FMT_NUM, bold=True)
     for cc in range(2, 4):
         ws.cell(row=88, column=cc).border = TOP_BORDER
-    _calc(89, "Shares outstanding (mm)",     "=C30", FMT_SHARES)
+    # Year-10 share count after buyback compounding: shares × (1 - buyback_y)^(years)
+    # With buyback_y = 0 this reduces to current shares, so non-buyback tickers
+    # are unaffected.
+    _calc(89, "Shares outstanding at Y10 (buyback-adjusted, mm)",
+          "=C30*(1-C32)^($C$19+$C$20)", FMT_SHARES)
     _calc(90, "Implied Price per Share",     "=C88/C89", FMT_USD, bold=True)
     for cc in range(2, 4):
         ws.cell(row=90, column=cc).border = DOUBLE_TOP

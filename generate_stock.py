@@ -115,10 +115,15 @@ def main():
         terminal_capex_pct_revenue=cfg_dcf.get("terminal_capex_pct_revenue", 0.08),
         sbc_fade_years=cfg_dcf.get("sbc_fade_years", 5),
         terminal_sbc_pct_revenue=cfg_dcf.get("terminal_sbc_pct_revenue", 0.03),
+        model_buybacks=cfg_dcf.get("model_buybacks", True),
+        buyback_yield_cap=cfg_dcf.get("buyback_yield_cap", 0.06),
+        terminal_growth_megacap=cfg_dcf.get("terminal_growth_megacap", 0.035),
+        megacap_threshold=cfg_dcf.get("megacap_threshold", 100_000_000_000.0),
+        terminal_revenue_multiple_cap=cfg_dcf.get("terminal_revenue_multiple_cap", 20.0),
         wacc_adjustment_bull=cfg_dcf.get("wacc_adjustment_bull", -0.010),
         wacc_adjustment_bear=cfg_dcf.get("wacc_adjustment_bear", 0.010),
-        tv_weight_gordon=cfg_dcf.get("tv_weight_gordon", 0.5),
-        tv_weight_exit=cfg_dcf.get("tv_weight_exit", 0.5),
+        tv_weight_gordon=cfg_dcf.get("tv_weight_gordon", 0.4),
+        tv_weight_exit=cfg_dcf.get("tv_weight_exit", 0.6),
     )
     with _timed("Running bank-style DCF (Bull/Base/Bear)"):
         dcf = run_dcf(stmt, assumptions, cfg_wacc, facts, quote=quote, peer_quotes=peer_quotes)

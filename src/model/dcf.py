@@ -22,12 +22,15 @@ class DCFAssumptions:
     # Horizon
     explicit_years: int = 5
     fade_years: int = 5
-    terminal_growth: float = 0.025
+    terminal_growth: float = 0.030
+    terminal_growth_megacap: float = 0.035
+    megacap_threshold: float = 100_000_000_000.0   # $100B market cap
     tax_rate: float = 0.21
 
     # Revenue growth
     revenue_growth_cap: float = 0.30
     revenue_growth_floor: float = -0.05
+    terminal_revenue_multiple_cap: float = 20.0   # Y10 revenue ≤ base × 20
 
     # Margin glide (premiums ADDED to current-FY EBIT margin)
     ebit_margin_premium_bull: float = 0.03
@@ -40,20 +43,23 @@ class DCFAssumptions:
     # Stock-based comp treatment
     sbc_as_cash_expense: bool = True
 
-    # CapEx and SBC ratio fades — keep trailing ratio for Y1-Y2,
-    # then taper linearly to terminal over `fade_years` years.
+    # CapEx and SBC ratio fades
     capex_fade_years: int = 5
     terminal_capex_pct_revenue: float = 0.08
     sbc_fade_years: int = 5
     terminal_sbc_pct_revenue: float = 0.03
 
+    # Buyback modeling — banks factor this in, we do too
+    model_buybacks: bool = True
+    buyback_yield_cap: float = 0.06
+
     # Scenario WACC spreads
     wacc_adjustment_bull: float = -0.010
     wacc_adjustment_bear: float = 0.010
 
-    # Terminal value blend
-    tv_weight_gordon: float = 0.5
-    tv_weight_exit: float = 0.5
+    # Terminal value blend — weighted toward Exit Multiple for quality capture
+    tv_weight_gordon: float = 0.4
+    tv_weight_exit: float = 0.6
 
 
 @dataclass
@@ -138,6 +144,11 @@ class DCFResult:
     peer_high_ev_ebitda: Optional[float]
     peer_low_pe: Optional[float]
     peer_high_pe: Optional[float]
+    # Annual buyback yield (dollars repurchased / market cap) — drives
+    # per-share accretion. 0 for companies that don't buy back shares.
+    buyback_yield: float = 0.0
+    # The effective terminal growth we used (may differ from assumptions if megacap)
+    effective_terminal_growth: float = 0.03
     # Scenarios
     scenarios: Dict[str, DCFScenarioResult] = field(default_factory=dict)
     # Sensitivity grids (base case)
@@ -301,6 +312,37 @@ def _extract_nwc_ratio(stmt: IncomeStatement, company_facts: dict) -> Optional[f
 # Core projection engine
 # ------------------------------------------------------------------
 
+def _extract_buyback_yield(company_facts: dict, market_cap: float, cap: float = 0.06) -> float:
+    """Annualized share-buyback yield = last-FY buybacks / current market cap.
+
+    Uses SEC concept `PaymentsForRepurchaseOfCommonStock` (value usually
+    reported positive in the cash-flow-from-financing section; sign doesn't
+    matter — we take absolute value). Returns 0.0 if the concept isn't
+    tagged or there's no data. Capped at `cap` to avoid distortion from
+    one-time special repurchases.
+    """
+    if not market_cap or market_cap <= 0:
+        return 0.0
+    us = company_facts.get("facts", {}).get("us-gaap", {})
+    concepts = [
+        "PaymentsForRepurchaseOfCommonStock",
+        "PaymentsForRepurchaseOfEquity",
+        "StockRepurchasedDuringPeriodValue",
+    ]
+    for c in concepts:
+        if c not in us:
+            continue
+        units = us[c].get("units", {}).get("USD", [])
+        fy_facts = [f for f in units if f.get("fp") == "FY"]
+        if not fy_facts:
+            continue
+        latest = max(fy_facts, key=lambda f: f.get("fy", 0))
+        annual_buyback = abs(latest.get("val", 0))
+        y = annual_buyback / market_cap
+        return min(y, cap)
+    return 0.0
+
+
 def _fade_ratio(trailing: float, terminal: float, year_count: int,
                 fade_start: int = 2, fade_years: int = 5) -> float:
     """Ratio with a linear fade from `trailing` to `terminal`.
@@ -394,6 +436,16 @@ def _project_one_scenario(
         revenue_prev = revenue
         revenue = revenue_prev * (1 + growth)
 
+        # Revenue growth guardrail: cap Y10 revenue at base × multiple_cap.
+        # Prevents hyper-growth extrapolation (e.g. MP going 55× in 10 years).
+        # Historic outlier growth: NFLX ~22×, NVDA ~15×, TSLA ~24× per decade.
+        # Above the cap, scale back the projected revenue (effectively lowers
+        # growth for that year and subsequent years proportionally).
+        max_terminal_revenue = result.base_revenue * assumptions.terminal_revenue_multiple_cap
+        if revenue > max_terminal_revenue:
+            revenue = max_terminal_revenue
+            growth = (revenue / revenue_prev) - 1 if revenue_prev > 0 else 0
+
         # Margin schedule — mirrors growth: Y1/Y2 from consensus if available, then expand.
         if year_count == 1:
             if m_y1_consensus is not None:
@@ -467,13 +519,23 @@ def _project_one_scenario(
 
     ev = sum_pv + pv_tv_blended
     equity = ev + result.cash - result.debt
-    pps = equity / result.shares_outstanding if result.shares_outstanding > 0 else 0.0
+
+    # Buyback accretion: shares compound down by buyback_yield per year over
+    # the forecast horizon. Use the TERMINAL year's share count (fully
+    # compounded) because that's what matters for the TV portion, which
+    # dominates most DCF valuations for mature companies.
+    # Banks universally factor this in (Apple's ~2.25%/yr yield = ~25% cumulative
+    # share reduction over 10 years = 33% per-share accretion on TV).
+    buyback_shares = result.shares_outstanding
+    if result.buyback_yield > 0:
+        buyback_shares = result.shares_outstanding * (1 - result.buyback_yield) ** total_years
+    pps = equity / buyback_shares if buyback_shares > 0 else 0.0
 
     # Gordon-only and Exit-only PPS for football field
     equity_gordon = sum_pv + pv_tv_gordon + result.cash - result.debt
     equity_exit = sum_pv + pv_tv_exit + result.cash - result.debt
-    pps_gordon = equity_gordon / result.shares_outstanding if result.shares_outstanding > 0 else 0.0
-    pps_exit = equity_exit / result.shares_outstanding if result.shares_outstanding > 0 else 0.0
+    pps_gordon = equity_gordon / buyback_shares if buyback_shares > 0 else 0.0
+    pps_exit = equity_exit / buyback_shares if buyback_shares > 0 else 0.0
 
     return DCFScenarioResult(
         scenario=spec, wacc=wacc, projections=projections,
@@ -549,6 +611,24 @@ def run_dcf(stmt: IncomeStatement, assumptions: DCFAssumptions,
     if market_cap and market_cap < small_cap_threshold and beta < beta_min_smallcap:
         beta = beta_min_smallcap
 
+    # Mega-cap quality premium: for companies above the megacap threshold
+    # (default $100B), use the higher terminal growth assumption. This
+    # reflects durable moats, services/recurring revenue, emerging market
+    # runway, etc. — all the things that justify banks pricing AAPL/MSFT
+    # with higher implied terminal growth than a no-name industrial.
+    effective_terminal_growth = assumptions.terminal_growth
+    if market_cap and market_cap >= assumptions.megacap_threshold:
+        effective_terminal_growth = assumptions.terminal_growth_megacap
+
+    # Share buyback yield — drives per-share accretion over the forecast
+    # period. Banks always include this for companies like AAPL/MSFT that
+    # return ~2-5% of market cap per year via buybacks.
+    buyback_yield = 0.0
+    if assumptions.model_buybacks and market_cap:
+        buyback_yield = _extract_buyback_yield(
+            company_facts, market_cap, cap=assumptions.buyback_yield_cap
+        )
+
     wacc_inputs = WACCInputs(
         risk_free_rate=wacc_config["risk_free_rate"],
         equity_risk_premium=wacc_config["equity_risk_premium"],
@@ -613,7 +693,13 @@ def run_dcf(stmt: IncomeStatement, assumptions: DCFAssumptions,
         analyst_count=getattr(quote, "analyst_count", None) if quote else None,
         analyst_eps_y1=getattr(quote, "analyst_eps_current_year", None) if quote else None,
         analyst_eps_y2=getattr(quote, "analyst_eps_next_year", None) if quote else None,
+        buyback_yield=buyback_yield,
+        effective_terminal_growth=effective_terminal_growth,
     )
+
+    # Override the assumptions copy used for projections with the effective
+    # terminal growth (which may be the megacap 3.5% value).
+    assumptions.terminal_growth = effective_terminal_growth
 
     # Derive target EBIT margins for Y1 and Y2 from consensus EPS × shares / revenue.
     # Implied net margin; gross up by (1 - tax) to get EBIT margin proxy.

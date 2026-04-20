@@ -5,12 +5,20 @@ dcf:
   # Forecast horizon: explicit + fade + terminal perpetuity
   explicit_years: 5           # detailed operating-model years (1-5)
   fade_years: 5               # transition years (6-10) where growth/margin converge to terminal
-  terminal_growth: 0.025      # perpetual growth after year 10 (long-run GDP-ish)
+  terminal_growth: 0.030      # perpetual growth after year 10 — long-run nominal GDP
+  terminal_growth_megacap: 0.035  # for market cap > megacap_threshold (quality premium)
+  megacap_threshold: 100000000000 # USD 100B — above this, use terminal_growth_megacap
   tax_rate: 0.21              # US statutory federal + average state, used for forecast years
 
   # Revenue growth
   revenue_growth_cap: 0.30    # cap starting-year growth even if trailing CAGR is higher
   revenue_growth_floor: -0.05 # floor for bear case
+  # Guardrail: cap terminal (Y10) revenue at this multiple of base revenue.
+  # Prevents hyper-growth names (UAMY, MP) from extrapolating to absurd
+  # terminal revenue. Historic outlier growth: NFLX ~22x, NVDA ~15x,
+  # TSLA ~24x, AMZN ~108x over their hottest decades. 20x is a realistic cap
+  # for true winners; most companies max out at 5-10x.
+  terminal_revenue_multiple_cap: 20.0
 
   # Margin glide
   ebit_margin_premium_bull: 0.03   # bull-case adds 300bps vs current
@@ -38,9 +46,22 @@ dcf:
   wacc_adjustment_bull: -0.010     # bull case: -100bps (lower perceived risk)
   wacc_adjustment_bear: 0.010      # bear case: +100bps
 
-  # Terminal value blend
-  tv_weight_gordon: 0.5            # weighting between Gordon Growth and Exit Multiple
-  tv_weight_exit: 0.5
+  # Terminal value blend — shifted toward Exit Multiple because peer
+  # EV/EBITDA captures the market's "quality premium" that pure Gordon
+  # Growth (rf-based discount) systematically understates for mega-cap,
+  # moated, recurring-revenue businesses.
+  tv_weight_gordon: 0.4
+  tv_weight_exit: 0.6
+
+  # Share buyback modeling: many mature companies (AAPL, MSFT, GOOGL) return
+  # substantial capital via buybacks. Buybacks reduce share count, which
+  # accretes per-share value. Banks always factor this in. We extract
+  # annual buyback ($) from SEC cash flow, divide by market cap for yield,
+  # and apply compound share reduction over the forecast horizon.
+  model_buybacks: true
+  # Cap on buyback yield to avoid extreme values distorting the model
+  # (e.g. a one-time large repurchase). Above this cap we use the cap.
+  buyback_yield_cap: 0.06
 
 wacc:
   # Market inputs — UPDATE QUARTERLY
