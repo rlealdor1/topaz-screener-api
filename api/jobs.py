@@ -167,9 +167,34 @@ def run_job(job_id: str, ticker: str) -> None:
             dcf=dcf, football_field_png=football_png,
         )
 
-        # ---- 8. Upload to Supabase ----
+        # ---- 8. Write metadata.json alongside deliverables ----
+        # This is what the /api/screening/recent endpoint reads to populate
+        # the "Recently Screened" cards. Small JSON so listing is cheap.
+        import json
+        recommendation_raw = (payload.executive_summary.get("recommendation")
+                              if payload and payload.executive_summary else None)
+        metadata = {
+            "ticker": ticker,
+            "company_name": title,
+            "generated_at": _now_iso(),
+            "current_price": quote.current_price,
+            "recommendation": recommendation_raw,
+            "dcf_base_price": dcf.base.price_per_share if dcf.base else None,
+            "analyst_target_mean": quote.analyst_target_mean,
+            "analyst_count": quote.analyst_count,
+            "sector": quote.sector,
+            "industry": quote.industry,
+        }
+        metadata_path = work_dir / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+        # ---- 9. Upload all files to Supabase ----
         _update(job_id, step="Uploading deliverables")
-        local_files: Dict[str, Path] = {"excel": excel_path, "pptx": pptx_path}
+        local_files: Dict[str, Path] = {
+            "excel": excel_path,
+            "pptx": pptx_path,
+            "metadata": metadata_path,
+        }
         if comps_path:
             local_files["comps"] = comps_path
         if word_path:
@@ -191,8 +216,7 @@ def run_job(job_id: str, ticker: str) -> None:
             current_price=quote.current_price,
             analyst_target_mean=quote.analyst_target_mean,
             dcf_base_price=dcf.base.price_per_share if dcf.base else None,
-            recommendation=(payload.executive_summary.get("recommendation")
-                            if payload and payload.executive_summary else None),
+            recommendation=recommendation_raw,
         )
 
     except Exception as e:

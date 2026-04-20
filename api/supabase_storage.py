@@ -26,6 +26,7 @@ _MIME = {
     ".png":  "image/png",
     ".txt":  "text/plain",
     ".pdf":  "application/pdf",
+    ".json": "application/json",
 }
 
 
