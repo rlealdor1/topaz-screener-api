@@ -81,12 +81,20 @@ def _create_signed_url(remote_path: str, expires_in: int = 3600) -> str:
             f"Supabase sign failed ({resp.status_code}): {resp.text[:300]}"
         )
     data = resp.json()
-    # API returns `signedURL` starting with /storage/v1/...; prepend the project URL.
+    # API returns `signedURL` as a relative path. Two cases observed across
+    # Supabase versions:
+    #   newer: "/storage/v1/object/sign/<bucket>/<path>?token=..."
+    #   older: "/object/sign/<bucket>/<path>?token=..."
+    # We normalize both to always include /storage/v1/ in the final URL.
     relative = data.get("signedURL") or data.get("signed_url") or data.get("signedUrl")
     if not relative:
         raise RuntimeError(f"No signedURL in response: {data}")
     if relative.startswith("http"):
         return relative
+    if not relative.startswith("/"):
+        relative = "/" + relative
+    if not relative.startswith("/storage/v1/"):
+        relative = "/storage/v1" + relative
     return f"{_base_url()}{relative}"
 
 
