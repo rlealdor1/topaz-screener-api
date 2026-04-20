@@ -230,8 +230,10 @@ def _period_for_fact(fact: dict, instant: bool = False) -> Optional[Period]:
     end = parse_date(fact["end"])
     if instant or not fact.get("start"):
         fp = fact.get("fp", "")
-        fy = fact.get("fy", end.year)
-        frame = fact.get("frame", "")
+        # Fall back to end.year when `fy` is missing OR explicitly None.
+        # SEC data sometimes has fy=null for older balance-sheet facts.
+        fy = fact.get("fy") or end.year
+        frame = fact.get("frame") or ""
         if fp == "FY" or frame.endswith("Q4I") or (end.month == 12 and end.day >= 28):
             return Period(fiscal_year=fy, quarter=None, start=date(fy, 1, 1), end=end)
         q_month = end.month
