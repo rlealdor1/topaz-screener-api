@@ -57,3 +57,111 @@ DAVE:
   - HOOD    # Robinhood (retail brokerage, fintech-adjacent)
   - NU      # Nu Holdings (LatAm neobank, growth analog)
   - PYPL    # PayPal (digital payments scale-peer)
+
+# ====================================================================
+# Mega-cap tech — used for AAPL, MSFT, GOOGL, etc.
+# ====================================================================
+
+AAPL:
+  - MSFT    # Microsoft
+  - GOOGL   # Alphabet
+  - META    # Meta
+  - AMZN    # Amazon
+  - NVDA    # Nvidia
+  - ORCL    # Oracle (enterprise software / hardware)
+  - HPQ     # HP (PC hardware peer)
+MSFT:
+  - AAPL
+  - GOOGL
+  - META
+  - AMZN
+  - ORCL
+  - CRM     # Salesforce
+  - NOW     # ServiceNow
+GOOGL:
+  - META
+  - AAPL
+  - MSFT
+  - AMZN
+  - NFLX
+  - PINS    # Pinterest (advertising peer)
+  - SNAP    # Snap (advertising peer)
+GOOG:
+  - META
+  - AAPL
+  - MSFT
+  - AMZN
+  - NFLX
+  - PINS
+  - SNAP
+META:
+  - GOOGL
+  - AAPL
+  - MSFT
+  - AMZN
+  - SNAP
+  - PINS
+  - NFLX
+AMZN:
+  - WMT     # Walmart (retail scale)
+  - MSFT    # AWS competes with Azure
+  - GOOGL   # Ads + Cloud
+  - SHOP    # Shopify (e-commerce)
+  - COST    # Costco
+  - TGT     # Target
+  - META
+NVDA:
+  - AMD     # AMD (direct GPU/CPU competitor)
+  - INTC    # Intel
+  - TSM     # (not US, may 404 — but included)
+  - AVGO    # Broadcom
+  - QCOM    # Qualcomm
+  - MU      # Micron
+  - ARM     # Arm Holdings
+AMD:
+  - NVDA
+  - INTC
+  - AVGO
+  - QCOM
+  - MU
+  - MRVL    # Marvell
+  - ARM
+INTC:
+  - NVDA
+  - AMD
+  - AVGO
+  - QCOM
+  - TXN
+  - MU
+  - ARM
+TSLA:
+  - F       # Ford
+  - GM      # General Motors
+  - RIVN    # Rivian
+  - LCID    # Lucid
+  - NIO     # NIO
+  - BYDDY   # BYD
+  - TM      # Toyota (may 404 as ADR)
+
+# ====================================================================
+# Other high-growth / commonly-screened
+# ====================================================================
+
+HIMS:
+  # Consumer telehealth / wellness
+  - OSCR
+  - TDOC    # Teladoc
+  - LFMD    # LifeMD
+  - WW      # WeightWatchers
+  - DOCS    # Doximity
+  - AMWL    # Amwell
+  - NVO     # Novo Nordisk (GLP-1 scale peer)
+PLTR:
+  # Government + enterprise AI/data
+  - CRWD    # CrowdStrike (enterprise security)
+  - SNOW    # Snowflake (data platform)
+  - DDOG    # Datadog
+  - NET     # Cloudflare
+  - MDB     # MongoDB
+  - AI      # C3.ai (pure AI name)
+  - NOW     # ServiceNow (large enterprise SaaS)
