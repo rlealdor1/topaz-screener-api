@@ -1,0 +1,78 @@
+# Default assumptions for DCF and generation
+# Update the market inputs quarterly as rates / risk premia shift.
+
+dcf:
+  # Forecast horizon: explicit + fade + terminal perpetuity
+  explicit_years: 5           # detailed operating-model years (1-5)
+  fade_years: 5               # transition years (6-10) where growth/margin converge to terminal
+  terminal_growth: 0.025      # perpetual growth after year 10 (long-run GDP-ish)
+  tax_rate: 0.21              # US statutory federal + average state, used for forecast years
+
+  # Revenue growth
+  revenue_growth_cap: 0.30    # cap starting-year growth even if trailing CAGR is higher
+  revenue_growth_floor: -0.05 # floor for bear case
+
+  # Margin glide
+  ebit_margin_premium_bull: 0.03   # bull-case adds 300bps vs current
+  ebit_margin_premium_base: 0.01   # base adds 100bps
+  ebit_margin_premium_bear: -0.02  # bear strips 200bps
+
+  # Working capital: fraction of ΔRevenue that needs to be funded
+  nwc_pct_delta_revenue: 0.05      # fallback if we can't derive from CF statement
+
+  # Stock-based compensation: treat as real cash expense (standard at major banks)
+  sbc_as_cash_expense: true
+
+  # CapEx fade: construction-phase miners/semis have very high trailing CapEx/Rev ratios
+  # (30%+) that don't persist. Fade from trailing ratio to a mature terminal ratio
+  # linearly over `capex_fade_years`, starting in year 3.
+  capex_fade_years: 5              # fade over years 3 → 3 + N
+  terminal_capex_pct_revenue: 0.08 # mature miners/industrials ~5-10%
+
+  # SBC fade: pre-profit companies have huge trailing SBC/Rev ratios (20%+) driven
+  # by small revenue denominator. Fade to a terminal SBC ratio over `sbc_fade_years`.
+  sbc_fade_years: 5
+  terminal_sbc_pct_revenue: 0.03   # mature companies ~2-4%
+
+  # Scenario WACC spreads (added to base-case WACC)
+  wacc_adjustment_bull: -0.010     # bull case: -100bps (lower perceived risk)
+  wacc_adjustment_bear: 0.010      # bear case: +100bps
+
+  # Terminal value blend
+  tv_weight_gordon: 0.5            # weighting between Gordon Growth and Exit Multiple
+  tv_weight_exit: 0.5
+
+wacc:
+  # Market inputs — UPDATE QUARTERLY
+  risk_free_rate: 0.042            # 10Y US Treasury yield (approx)
+  equity_risk_premium: 0.055       # Damodaran / Duff & Phelps implied ERP
+
+  # Beta handling
+  beta_fallback: 1.10              # used if yfinance doesn't report a beta
+  beta_min_smallcap: 1.00          # floor for market cap < small_cap_threshold
+  small_cap_threshold: 10000000000 # USD 10B market cap cutoff
+  # Rationale: yfinance's 3Y beta regression collapses toward zero for
+  # thinly-traded small-caps (UAMY reported β=0.10 despite 10× 52W range).
+  # This floors beta to 1.0 for sub-$10B names to avoid the DCF being
+  # artificially undiscounted.
+
+  # Cost of debt: derived from leverage bucket (net_debt / EBITDA)
+  credit_spread_net_cash: 0.010    # net cash position
+  credit_spread_ig_low: 0.015      # leverage 0-1x
+  credit_spread_ig_mid: 0.025      # leverage 1-3x
+  credit_spread_crossover: 0.040   # leverage 3-4.5x
+  credit_spread_high_yield: 0.060  # leverage > 4.5x
+  credit_spread_distressed: 0.090  # negative EBITDA
+
+history:
+  quarters_back: 12
+
+claude:
+  model: claude-sonnet-4-6
+  max_tokens: 8000
+  temperature: 0.4
+
+output:
+  root: "Auto-generated"
+  excel_revenue_formatting: "#,##0"
+  excel_percent_formatting: "0.0%"

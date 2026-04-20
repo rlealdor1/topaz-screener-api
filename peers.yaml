@@ -1,0 +1,59 @@
+# Per-ticker peer overrides. If a ticker is not listed, auto-picked from SIC/sector.
+COIN:
+  - HOOD
+  - MARA
+  - RIOT
+  - CME
+  - NDAQ
+  - ICE
+  - SQ
+NFLX:
+  - DIS
+  - AMZN
+  - WBD
+  - PARA
+  - ROKU
+  - SPOT
+  - AAPL
+DUOL:
+  - CHGG
+  - COUR
+  - DOCU
+  - ZM
+  - TWLO
+  - HUBS
+OSCR:
+  - UNH
+  - CVS
+  - CI
+  - HUM
+  - ELV
+  - MOH
+  - CNC
+MP:
+  # Rare-earth / critical-minerals / strategic metals miners
+  - LYSCF   # Lynas (rare earths, Australia)
+  - USAR    # USA Rare Earth
+  - TMC     # TMC the metals company
+  - NB      # NioCorp Developments
+  - REMX    # VanEck Rare Earth ETF (as benchmark)
+  - FCX     # Freeport-McMoRan (diversified copper/gold — scale peer)
+  - SCCO    # Southern Copper
+UAMY:
+  # US critical-minerals / strategic metals miners (antimony, tungsten, uranium, REE)
+  - MP      # MP Materials (rare earths — scale-peer narrative)
+  - PPTA    # Perpetua Resources (antimony + gold at Stibnite, closest direct peer)
+  - USAR    # USA Rare Earth
+  - UUUU    # Energy Fuels (uranium + REE processing)
+  - TMC     # TMC the metals company (seabed critical minerals)
+  - NB      # NioCorp (niobium/scandium/REE)
+  - URG     # Ur-Energy (uranium, domestic)
+DAVE:
+  # Consumer neobank / fintech peers
+  - SOFI    # SoFi Technologies (neobank + lending)
+  - UPST    # Upstart Holdings (AI underwriting)
+  - AFRM    # Affirm (BNPL, consumer fintech)
+  - LC      # LendingClub (personal loans)
+  - HOOD    # Robinhood (retail brokerage, fintech-adjacent)
+  - NU      # Nu Holdings (LatAm neobank, growth analog)
+  - PYPL    # PayPal (digital payments scale-peer)

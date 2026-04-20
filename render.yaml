@@ -1,0 +1,31 @@
+# Render.com service definition — auto-detected when connecting the repo.
+# After the service is created, set the `sync: false` env vars manually in
+# the Render dashboard (they hold secrets that shouldn't live in this file).
+
+services:
+  - type: web
+    name: topaz-screener-api
+    runtime: docker
+    plan: starter           # $7/mo, always-warm
+    region: oregon          # matches most US-East-1 Supabase projects well
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      # Secrets — set each of these manually in Render dashboard
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SEC_USER_AGENT
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Shared secret used by Next.js to authenticate to this API.
+      # Render generates a random value and you copy it into Vercel.
+      - key: INTERNAL_API_SECRET
+        generateValue: true
+
+      # Optional: extra CORS origins (comma-separated). Defaults are baked in.
+      - key: CORS_EXTRA_ORIGINS
+        value: ""
