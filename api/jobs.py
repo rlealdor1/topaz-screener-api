@@ -94,8 +94,11 @@ def run_job(job_id: str, ticker: str) -> None:
         _update(job_id, step="Fetching market data")
         quote = get_quote(ticker)
 
-        peer_tickers = get_peers(ticker, _PEERS_PATH, None)
+        # Peer resolution: yaml → sector default → generic. Always non-empty.
+        peer_tickers = get_peers(ticker, _PEERS_PATH, None, sector=quote.sector)
         peer_quotes = [get_quote(t) for t in peer_tickers] if peer_tickers else []
+        # Filter out any peers yfinance couldn't resolve
+        peer_quotes = [p for p in peer_quotes if p and p.market_cap]
 
         # ---- 2. DCF ----
         _update(job_id, step="Running bank-style DCF")

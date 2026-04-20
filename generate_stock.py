@@ -87,11 +87,14 @@ def main():
         quote = get_quote(ticker)
 
     peers_cli = args.peers.split(",") if args.peers else None
-    peer_tickers = get_peers(ticker, HERE / "peers.yaml", peers_cli)
+    peer_tickers = get_peers(ticker, HERE / "peers.yaml", peers_cli,
+                             sector=quote.sector)
     peer_quotes = []
     if peer_tickers:
         with _timed(f"Fetching peer quotes ({len(peer_tickers)} tickers)"):
             peer_quotes = [get_quote(t) for t in peer_tickers]
+        # Filter out peers yfinance couldn't resolve (missing market cap)
+        peer_quotes = [p for p in peer_quotes if p and p.market_cap]
 
     # Step 3: Bank-style DCF (Bull/Base/Bear)
     cfg_dcf = config["dcf"]
