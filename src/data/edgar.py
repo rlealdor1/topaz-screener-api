@@ -44,13 +44,41 @@ class EdgarClient:
             cached = self.cache.get(url)
             if cached is not None:
                 return cached
-        self._throttle()
-        resp = requests.get(url, headers=_HEADERS, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if use_cache:
-            self.cache.set(url, data)
-        return data
+
+        # SEC rate-limits by IP. On shared-IP infra (Render, AWS, etc.) we
+        # sometimes hit 429 even when well under the documented 10 req/s,
+        # because other tenants on the same IP are burning quota. Retry with
+        # exponential backoff up to 4 times before giving up.
+        max_attempts = 4
+        backoff_seconds = [2, 5, 15, 45]
+        last_err: Exception | None = None
+        for attempt in range(max_attempts):
+            self._throttle()
+            try:
+                resp = requests.get(url, headers=_HEADERS, timeout=30)
+                if resp.status_code == 429:
+                    # Too many requests — wait and retry
+                    wait = backoff_seconds[min(attempt, len(backoff_seconds) - 1)]
+                    time.sleep(wait)
+                    last_err = requests.HTTPError(
+                        f"429 Too Many Requests from SEC (attempt {attempt + 1}/{max_attempts}); "
+                        f"waited {wait}s before retry"
+                    )
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                if use_cache:
+                    self.cache.set(url, data)
+                return data
+            except requests.HTTPError as e:
+                if resp is not None and resp.status_code in (500, 502, 503, 504):
+                    wait = backoff_seconds[min(attempt, len(backoff_seconds) - 1)]
+                    time.sleep(wait)
+                    last_err = e
+                    continue
+                raise
+        # Exhausted all retries
+        raise last_err or RuntimeError(f"SEC request failed after {max_attempts} attempts: {url}")
 
     # ------------------------------------------------------------------
     # Ticker → CIK
