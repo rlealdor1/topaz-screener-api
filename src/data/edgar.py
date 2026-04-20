@@ -2,8 +2,16 @@
 
 Uses the free, official SEC JSON endpoints. Requires User-Agent header.
 Rate limits to 10 req/s (SEC hard cap).
+
+`company_tickers.json` is bundled locally at src/data/company_tickers.json
+so we never have to hit SEC's `/files/company_tickers.json` endpoint
+(which is aggressively rate-limited on shared-IP cloud hosts like Render).
+Refresh locally by running `curl -H "User-Agent: $SEC_USER_AGENT"
+https://www.sec.gov/files/company_tickers.json -o src/data/company_tickers.json`
+whenever a newly-IPO'd ticker needs to be screenable.
 """
 from __future__ import annotations
+import json
 import os
 import time
 from pathlib import Path
@@ -18,6 +26,10 @@ load_dotenv(override=True)
 
 _UA = os.environ.get("SEC_USER_AGENT", "Ramon Leal Doris rleal@topaz.com.mx")
 _HEADERS = {"User-Agent": _UA, "Accept-Encoding": "gzip, deflate"}
+
+# Bundled local copy of SEC's full ticker list. Avoids hitting the
+# /files/company_tickers.json endpoint which is heavily rate-limited.
+_BUNDLED_TICKERS_PATH = Path(__file__).resolve().parent / "company_tickers.json"
 
 
 class EdgarClient:
@@ -83,9 +95,26 @@ class EdgarClient:
     # ------------------------------------------------------------------
     # Ticker → CIK
     # ------------------------------------------------------------------
+    def _load_tickers(self) -> dict:
+        """Load the ticker→CIK map. Prefers the bundled local file to avoid
+        hitting SEC's rate-limited /files/company_tickers.json endpoint."""
+        # 1. Try bundled file (shipped with the repo)
+        if _BUNDLED_TICKERS_PATH.exists():
+            try:
+                with open(_BUNDLED_TICKERS_PATH, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        # 2. Try on-disk cache (set from a previous successful fetch)
+        cached = self.cache.get(self.TICKERS_URL)
+        if cached is not None:
+            return cached
+        # 3. Fall back to fetching from SEC (last resort; may hit 429)
+        return self._get(self.TICKERS_URL)
+
     def ticker_to_cik(self, ticker: str) -> str:
         ticker = ticker.upper().strip()
-        data = self._get(self.TICKERS_URL)
+        data = self._load_tickers()
         # data is a dict of {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}, ...}
         for entry in data.values():
             if entry.get("ticker", "").upper() == ticker:
@@ -94,7 +123,7 @@ class EdgarClient:
 
     def company_title(self, ticker: str) -> str:
         ticker = ticker.upper().strip()
-        data = self._get(self.TICKERS_URL)
+        data = self._load_tickers()
         for entry in data.values():
             if entry.get("ticker", "").upper() == ticker:
                 return entry["title"]
