@@ -593,6 +593,17 @@ def run_dcf(stmt: IncomeStatement, assumptions: DCFAssumptions,
             if shares:
                 break
 
+    # For foreign issuers (IFRS): SEC share count is ordinary shares in the
+    # home market, which may not equal the US-listed ADR count. The ADR price
+    # we value against is USD, so derive shares from yfinance market cap /
+    # price to stay consistent. Also a universal fallback if SEC had no shares.
+    is_ifrs = getattr(stmt, "reporting_currency", "USD") != "USD"
+    if (is_ifrs or shares <= 0) and quote is not None:
+        mc = getattr(quote, "market_cap", None)
+        px = getattr(quote, "current_price", None)
+        if mc and px and px > 0:
+            shares = mc / px
+
     # Market inputs for WACC — from yfinance quote if available
     beta = wacc_config.get("beta_fallback", 1.10)
     market_cap = 0.0

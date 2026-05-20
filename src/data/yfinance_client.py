@@ -190,6 +190,39 @@ def get_quote(ticker: str) -> QuoteSnapshot:
     )
 
 
+_FX_CACHE: Dict[str, float] = {}
+
+
+def get_fx_rate(currency: str) -> float:
+    """Return the multiplier to convert 1 unit of `currency` into USD.
+
+    Used for foreign issuers (IFRS filers) whose SEC financials are reported
+    in a non-USD currency. Falls back to 1.0 (no conversion) on any failure.
+    Cached per-process so repeated calls are free.
+    """
+    currency = (currency or "USD").upper()
+    if currency == "USD":
+        return 1.0
+    if currency in _FX_CACHE:
+        return _FX_CACHE[currency]
+    rate = 1.0
+    try:
+        t = yf.Ticker(f"{currency}USD=X")
+        hist = t.history(period="5d")
+        if hist is not None and not hist.empty:
+            rate = float(hist["Close"].iloc[-1])
+        else:
+            info = t.info or {}
+            rate = float(info.get("regularMarketPrice")
+                         or info.get("previousClose") or 1.0)
+    except Exception:
+        rate = 1.0
+    if rate <= 0:
+        rate = 1.0
+    _FX_CACHE[currency] = rate
+    return rate
+
+
 if __name__ == "__main__":
     for tkr in ("COIN", "HOOD", "CME"):
         q = get_quote(tkr)

@@ -207,6 +207,10 @@ class IncomeStatement:
     lines: List[ISLine] = field(default_factory=list)
     balance_sheet: Dict[str, Dict[str, float]] = field(default_factory=dict)
     cash_flow: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # Set for IFRS / foreign-issuer extractions: original reporting currency
+    # and the FX rate used to convert all monetary values to USD.
+    reporting_currency: str = "USD"
+    fx_rate_to_usd: float = 1.0
 
     def line(self, concept_or_section: str) -> Optional[ISLine]:
         for l in self.lines:
@@ -430,9 +434,297 @@ SECTION_ORDER = [
 
 # ---------- Main extraction ----------
 
+class ForeignIssuerError(ValueError):
+    """Raised when a ticker reports under IFRS and IFRS extraction also fails."""
+    pass
+
+
+# ---------- IFRS (foreign private issuer) extraction ----------
+#
+# Foreign issuers (Nokia, TSMC, ASML, SAP, etc.) file Form 20-F and tag XBRL
+# with the `ifrs-full` taxonomy. SEC only has ANNUAL data for them (no
+# quarterly), and the values are in the issuer's reporting currency (EUR for
+# Nokia). We extract annual-only and convert every monetary value to USD.
+
+IFRS_CORE_CONCEPTS = {
+    "total_revenue": ["RevenueFromContractsWithCustomers", "Revenue"],
+    "cost_of_revenue": ["CostOfSales"],
+    "gross_profit": ["GrossProfit"],
+    "operating_income": ["ProfitLossFromOperatingActivities"],
+    "pre_tax_income": ["ProfitLossBeforeTax"],
+    "tax_provision": ["IncomeTaxExpenseContinuingOperations"],
+    "net_income": ["ProfitLoss", "ProfitLossAttributableToOwnersOfParent"],
+    "eps_basic": ["BasicEarningsLossPerShare"],
+    "eps_diluted": ["DilutedEarningsLossPerShare"],
+}
+
+IFRS_OPEX_CONCEPTS = [
+    "ResearchAndDevelopmentExpense",
+    "SellingGeneralAndAdministrativeExpense",
+    "SellingExpense",
+    "DistributionCosts",
+    "AdministrativeExpense",
+    "MarketingExpense",
+    "OtherExpenseByFunction",
+]
+
+IFRS_BS_CF_CONCEPTS = {
+    "cash_and_equivalents": ["CashAndCashEquivalents"],
+    "long_term_debt": ["LongtermBorrowings", "NoncurrentBorrowings"],
+    "short_term_debt": ["CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings",
+                        "CurrentBorrowings"],
+    "d_and_a": ["DepreciationAndAmortisationExpense"],
+    "capex": ["PurchaseOfPropertyPlantAndEquipmentIntangibleAssetsOtherThanGoodwillInvestmentPropertyAndOtherNoncurrentAssets",
+             "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"],
+    "operating_cash_flow": ["CashFlowsFromUsedInOperatingActivities"],
+}
+
+IFRS_SHARE_CONCEPTS = ["WeightedAverageShares", "AdjustedWeightedAverageShares",
+                       "NumberOfSharesOutstanding"]
+
+IFRS_LABELS = {
+    "RevenueFromContractsWithCustomers": "Total revenue",
+    "Revenue": "Total revenue",
+    "CostOfSales": "Cost of sales",
+    "GrossProfit": "Gross profit",
+    "ProfitLossFromOperatingActivities": "Operating profit (loss)",
+    "ProfitLossBeforeTax": "Profit (loss) before tax",
+    "IncomeTaxExpenseContinuingOperations": "Income tax expense",
+    "ProfitLoss": "Net profit (loss)",
+    "ProfitLossAttributableToOwnersOfParent": "Net profit (loss)",
+    "BasicEarningsLossPerShare": "EPS - Basic",
+    "DilutedEarningsLossPerShare": "EPS - Diluted",
+    "ResearchAndDevelopmentExpense": "Research and development",
+    "SellingGeneralAndAdministrativeExpense": "Selling, general and administrative",
+    "SellingExpense": "Selling expenses",
+    "DistributionCosts": "Distribution costs",
+    "AdministrativeExpense": "Administrative expenses",
+    "MarketingExpense": "Marketing expenses",
+    "OtherExpenseByFunction": "Other operating expenses",
+}
+
+
+def _pick_annual_fact(facts: List[dict], fiscal_year: int) -> Optional[float]:
+    """From a concept's fact list, return the value for a full fiscal year.
+    Prefers facts with a `frame` (canonical) and the most recent filing."""
+    best, best_priority = None, float("inf")
+    for f in facts:
+        end = f.get("end", "")
+        start = f.get("start", "")
+        if not end:
+            continue
+        end_d = parse_date(end)
+        # Annual fact spanning the calendar year
+        if start:
+            start_d = parse_date(start)
+            dur = classify_duration(start_d, end_d)
+            if dur != "annual":
+                continue
+        if end_d.year != fiscal_year:
+            continue
+        priority = 0
+        if "frame" in f:
+            priority -= 2
+        # Prefer most recently filed
+        priority -= (f.get("fy", 0) or 0) / 100000.0
+        if priority < best_priority:
+            best_priority = priority
+            best = f.get("val")
+    return best
+
+
+def _pick_instant_fact(facts: List[dict], fiscal_year: int) -> Optional[float]:
+    """For balance-sheet (instant) IFRS facts — value at year-end."""
+    best, best_priority = None, float("inf")
+    for f in facts:
+        end = f.get("end", "")
+        if not end:
+            continue
+        end_d = parse_date(end)
+        if end_d.year != fiscal_year:
+            continue
+        # Year-end instant
+        if not (end_d.month == 12 and end_d.day >= 28):
+            continue
+        priority = 0
+        if "frame" in f:
+            priority -= 2
+        priority -= (f.get("fy", 0) or 0) / 100000.0
+        if priority < best_priority:
+            best_priority = priority
+            best = f.get("val")
+    return best
+
+
+def _extract_ifrs(ticker: str, cik: str, title: str, ifrs: dict,
+                  years_back: int = 3) -> IncomeStatement:
+    """Build an IncomeStatement from `ifrs-full` XBRL facts (annual-only),
+    converting all monetary values from the reporting currency to USD."""
+    # 1. Detect reporting currency from the revenue concept's units key
+    currency = "USD"
+    for rev_concept in IFRS_CORE_CONCEPTS["total_revenue"]:
+        if rev_concept in ifrs:
+            units = ifrs[rev_concept].get("units", {})
+            non_share = [u for u in units if u not in ("shares", "pure")]
+            if non_share:
+                currency = non_share[0]
+                break
+
+    from ..data.yfinance_client import get_fx_rate
+    fx = get_fx_rate(currency)   # multiplier: 1 unit of `currency` → USD
+
+    # 2. Latest fiscal year — scan revenue facts
+    latest_fy = date.today().year - 1
+    for rev_concept in IFRS_CORE_CONCEPTS["total_revenue"]:
+        if rev_concept in ifrs:
+            usd_facts = []
+            for u, flist in ifrs[rev_concept].get("units", {}).items():
+                usd_facts.extend(flist)
+            fys = [f.get("fy") for f in usd_facts if f.get("fp") == "FY" and f.get("fy")]
+            if fys:
+                latest_fy = max(latest_fy, max(fys))
+            break
+
+    # 3. Annual-only period axis
+    periods = [Period(fiscal_year=y, quarter=None,
+                      start=date(y, 1, 1), end=date(y, 12, 31))
+               for y in range(latest_fy - years_back, latest_fy + 1)]
+
+    stmt = IncomeStatement(
+        ticker=ticker.upper(), cik=cik, title=title, latest_fy=latest_fy,
+        latest_reported_quarter=Period(latest_fy, None,
+                                       date(latest_fy, 1, 1), date(latest_fy, 12, 31)),
+        periods=periods,
+    )
+
+    def concept_values(concept_names, instant=False, is_money=True):
+        """Return {period_label: value} for the first matching IFRS concept."""
+        for concept in concept_names:
+            if concept not in ifrs:
+                continue
+            units = ifrs[concept].get("units", {})
+            facts = None
+            for u, flist in units.items():
+                if u not in ("shares", "pure"):
+                    facts = flist
+                    break
+            if facts is None and units:
+                facts = next(iter(units.values()))
+            if not facts:
+                continue
+            values = {}
+            for p in periods:
+                v = (_pick_instant_fact(facts, p.fiscal_year) if instant
+                     else _pick_annual_fact(facts, p.fiscal_year))
+                if v is not None:
+                    # Convert monetary values to USD; leave per-share & ratios alone
+                    values[p.label] = v * fx if is_money else v
+            if values:
+                return concept, values
+        return None, {}
+
+    # 4. Core income-statement lines
+    section_map = {
+        "total_revenue": ("revenue_total", True),
+        "cost_of_revenue": ("cost_of_revenue", False),
+        "gross_profit": ("gross_profit", False),
+        "operating_income": ("operating_income", False),
+        "pre_tax_income": ("pre_tax", False),
+        "tax_provision": ("tax", False),
+        "net_income": ("net_income", True),
+    }
+    section_lines: Dict[str, List[ISLine]] = {}
+    for key, concepts in IFRS_CORE_CONCEPTS.items():
+        if key in ("eps_basic", "eps_diluted"):
+            concept, vals = concept_values(concepts, is_money=False)
+        else:
+            concept, vals = concept_values(concepts, is_money=True)
+        if not vals:
+            continue
+        if key in section_map:
+            section, is_total = section_map[key]
+            section_lines.setdefault(section, []).append(ISLine(
+                concept=concept, section=section,
+                label=IFRS_LABELS.get(concept, concept), values=vals,
+                is_total=is_total,
+            ))
+        elif key == "eps_basic":
+            section_lines.setdefault("eps", []).append(ISLine(
+                concept=concept, section="eps", label="EPS - Basic", values=vals))
+        elif key == "eps_diluted":
+            section_lines.setdefault("eps", []).append(ISLine(
+                concept=concept, section="eps", label="EPS - Diluted", values=vals))
+
+    # 5. Operating-expense breakdown
+    for concept in IFRS_OPEX_CONCEPTS:
+        c, vals = concept_values([concept], is_money=True)
+        if vals:
+            section_lines.setdefault("opex", []).append(ISLine(
+                concept=concept, section="opex",
+                label=IFRS_LABELS.get(concept, _display_label(concept)), values=vals))
+
+    # 6. Total opex — derive if not directly tagged: revenue − operating income
+    if "operating_income" in section_lines and "revenue_total" in section_lines:
+        rev = section_lines["revenue_total"][0].values
+        op = section_lines["operating_income"][0].values
+        derived = {k: rev[k] - op[k] for k in rev if k in op}
+        if derived:
+            section_lines.setdefault("opex_total", []).append(ISLine(
+                concept="_derived_total_opex", section="opex_total",
+                label="Total operating costs", values=derived, is_total=True))
+
+    # 7. Shares (weighted-average)
+    c, share_vals = concept_values(IFRS_SHARE_CONCEPTS, is_money=False)
+    if share_vals:
+        section_lines.setdefault("shares", []).append(ISLine(
+            concept=c, section="shares",
+            label="Shares Outstanding - Diluted", values=share_vals))
+
+    # 8. Flatten into stmt.lines in section order
+    for sec in SECTION_ORDER:
+        for line in section_lines.get(sec, []):
+            stmt.lines.append(line)
+
+    # 9. Balance sheet & cash flow
+    instant_keys = {"cash_and_equivalents", "long_term_debt", "short_term_debt"}
+    for key, concepts in IFRS_BS_CF_CONCEPTS.items():
+        is_instant = key in instant_keys
+        c, vals = concept_values(concepts, instant=is_instant, is_money=True)
+        if not vals:
+            continue
+        if key in ("d_and_a", "capex", "operating_cash_flow"):
+            stmt.cash_flow[key] = vals
+        else:
+            stmt.balance_sheet[key] = vals
+
+    # Record the FX conversion so downstream code / reports can note it
+    stmt.reporting_currency = currency
+    stmt.fx_rate_to_usd = fx
+    return stmt
+
+
 def extract_income_statement(ticker: str, cik: str, title: str, company_facts: dict,
                              quarters_back: int = 12) -> IncomeStatement:
-    us_gaap = company_facts.get("facts", {}).get("us-gaap", {})
+    all_facts = company_facts.get("facts", {})
+    us_gaap = all_facts.get("us-gaap", {})
+
+    # Foreign private issuers (Nokia, TSMC, ASML, SAP, etc.) file 20-F reports
+    # and tag XBRL with `ifrs-full`. Route them to the IFRS extractor.
+    if not us_gaap and "ifrs-full" in all_facts:
+        ifrs = all_facts["ifrs-full"]
+        stmt = _extract_ifrs(ticker, cik, title, ifrs)
+        if not any(l.section == "revenue_total" for l in stmt.lines):
+            raise ForeignIssuerError(
+                f"{ticker} ({title}) reports under IFRS but no usable revenue "
+                f"data was found in SEC EDGAR."
+            )
+        return stmt
+    if not us_gaap:
+        raise ValueError(
+            f"{ticker} has no US-GAAP XBRL data in SEC EDGAR. It may be an "
+            f"ETF, a fund, a SPAC pre-merger, or a non-reporting entity."
+        )
+
     latest_fy = _latest_fy(us_gaap)
 
     from .periods import build_period_axis
