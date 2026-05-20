@@ -151,7 +151,7 @@ def run_job(job_id: str, ticker: str) -> None:
                 temperature=config["claude"]["temperature"],
             )
             word_path = work_dir / f"{ticker}.docx"
-            write_docx(payload, stmt, quote, word_path)
+            write_docx(payload, stmt, quote, word_path, peer_quotes=peer_quotes)
         except Exception as e:
             log.exception("Claude call failed; prompt still written for manual fallback")
             _update(job_id, claude_error=str(e))

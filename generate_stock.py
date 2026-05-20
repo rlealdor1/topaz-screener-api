@@ -176,7 +176,8 @@ def main():
                                       temperature=config["claude"]["temperature"])
             if args.only in ("word", "all"):
                 with _timed(f"Writing {ticker}.docx"):
-                    write_docx(payload, stmt, quote, out_root / f"{ticker}.docx")
+                    write_docx(payload, stmt, quote, out_root / f"{ticker}.docx",
+                               peer_quotes=peer_quotes)
         except Exception as e:
             print(f"  ⚠ Claude generation failed: {e}")
             print(f"     The prompt.txt was still written — you can paste it into ChatGPT manually.")

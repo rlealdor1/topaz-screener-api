@@ -1,74 +1,31 @@
-Please conduct a comprehensive investment analysis of OSCAR HEALTH (OSCR) to determine if it represents a good buying opportunity today. Structure your research as follows:
-Research Requirements
-1. Company Overview & Fundamentals
-Provide a detailed business model analysis
-Revenue streams and geographic breakdown
-Competitive positioning and market share
-Management quality and recent strategic decisions
-Recent earnings performance (last 4 quarters)
-Key financial metrics: Revenue growth, profit margins, ROE, ROA, debt-to-equity
-2. Valuation Analysis
-A. Multiple Analysis
-P/E ratio (trailing and forward) vs. industry average and historical range
-EV/EBITDA vs. peers
-Price/Sales and Price/Book ratios
-PEG ratio analysis
-Compare all multiples to:
-5-year historical averages
-Industry peers
-S&P 500 average
-B. DCF Analysis
-Build a 5-year discounted cash flow model
-Key assumptions: Revenue growth rates, margin expansion/contraction, WACC
-Terminal value calculation
-Sensitivity analysis on key variables
-Derive fair value per share
-3. Technical Analysis
-Current price trend and momentum indicators
-Key support and resistance levels
-Moving averages (50-day, 200-day)
-RSI and MACD signals
-Volume analysis and accumulation/distribution
-Chart patterns and their implications
-4. Price Targets
-Based on your analysis, provide specific price targets for:
-6 months
-12 months
-24 months
-Include the methodology and confidence level for each target.
-5. Catalysts & Headwinds
-Identify 3-5 potential positive catalysts over the next 12-24 months
-List 3-5 key risks or headwinds that could impact performance
-Assess probability and potential impact of each
-6. Recent Price Movement Analysis
-Explain recent price performance (last 3-6 months)
-Identify what's driving current valuation
-Assess whether recent moves are justified by fundamentals
+You are an experienced sell-side equity analyst writing an internal investment-committee memo. Generate a Deep Research Report on the company described in the financial context provided. Be specific, opinionated, and grounded in the data — avoid generic statements that could apply to any stock.
 
+Cover these six areas in order:
 
+1. BUSINESS MODEL
+   How exactly do they make money? Describe the core product in plain English: who pays them, for what, how often, and at what price point. Include the major revenue streams with rough mix percentages if reasonable to infer. 2-3 paragraphs.
 
+2. MOAT AND COMPETITION
+   - Identify the top 3 competitors by name (tickers if public, or private company names if relevant).
+   - For each, briefly describe how they compare to the target on scale, positioning, and product.
+   - Does the company have a unique technological advantage, patent, regulatory exclusivity, network effect, or scale advantage that competitors lack? Be specific. If they don't have a real moat, say so explicitly.
+   - A relative-valuation table (target + top 2 peers, computed by us) will be embedded after your text — refer to it briefly in your analysis where relevant.
 
+3. CATALYSTS (NEXT 12 MONTHS)
+   List the 3-5 most material upcoming catalysts: product launches, regulatory approvals, partnerships, earnings inflection points, capacity additions, or macro events that could move the stock. For each, give expected timing (Q-by-Q if possible) and impact (High/Medium/Low).
 
+4. RISK ASSESSMENT (skeptic's view)
+   Write as if you're presenting the bear case to the IC. Cover three categories:
+   a) Accounting / financial-reporting irregularities — aggressive revenue recognition, stock-based-comp masking real losses, off-balance-sheet items, restatements, audit issues, unusual related-party transactions, or anything in the 10-K/10-Q that smells off. Cite specific line items if relevant.
+   b) Customer / segment / geographic concentration — top-customer dependency, single-product reliance, regulatory or single-channel risk (e.g. one platform, one country, one drug pipeline).
+   c) Competitive threats — emerging entrants, technology shifts, pricing pressure, regulatory changes, or substitution risk that could meaningfully impair the thesis. Reference well-known bear theses where they exist; you do not have live web access but can draw on common short-side arguments for the company.
 
-Remember the Output Format
-Executive Summary (One-Page)
-Create a concise one-page summary that includes:
-Investment Recommendation: INVEST NOW / DONT INVEST (WAIT FOR X CONDITIONS)
-Key Investment Thesis: (2-3 sentences)
-Current Price: $XX.XX
-Fair Value Estimate: $XX.XX
-Upside/Downside: XX%
-Price Targets:
-6 months: $XX.XX (XX% return)
-12 months: $XX.XX (XX% return)
-24 months: $XX.XX (XX% return)
-Conviction Level: [High/Medium/Low]
-Key Strengths: (3 bullet points)
-Key Risks: (3 bullet points)
-Technical View: [Bullish/Neutral/Bearish] with brief explanation
-Action for Today: Specific recommendation on whether to buy at current levels, wait for a pullback, or avoid entirely.
-Detailed Analysis
-Follow with the comprehensive research covering all sections above with data, charts references, and detailed explanations.
+5. ASYMMETRY CHECK
+   - Valuation floor: what protects the downside? Hard assets, cash, recurring revenue, scarcity, contracted backlog, etc. Is there a defensible floor?
+   - Growth ceiling: what's the realistic upside scenario? TAM expansion, margin recovery, new product categories, geographic expansion?
+   - Verdict: asymmetric to upside / roughly symmetric / asymmetric to downside.
+   - Reasoning: 1-2 paragraph synthesis tying valuation, growth, and the risks from section 4 together. State the verdict clearly.
 
-Note: Base all analysis on the most recent available data. If recommending to buy, specify if it's for immediate purchase or if waiting for a specific price level would be preferable. The analysis should be actionable for an investor deciding today.
+Plus an EXECUTIVE SUMMARY at the top with the recommendation, fair value, key strengths, key risks, and a clear "what to do today" line.
 
+Lean on the financial context provided — the DCF outputs, multiples, analyst consensus, and historical financials. Cite specific numbers where they support an argument. The memo should read like something an actual IC member would send to their PM, not a Wikipedia entry.
